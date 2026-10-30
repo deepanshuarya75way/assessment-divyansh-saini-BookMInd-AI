@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Compass, Sparkles, Plus, Check, AlertCircle, RefreshCw } from 'lucide-react';
+import { Compass, Sparkles, Plus, Check, AlertCircle, RefreshCw, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { AppShell } from '../components/layout/AppShell';
 import { Button } from '../components/ui/Button';
 import { BookCover } from '../components/books/BookCover';
@@ -18,6 +18,7 @@ export const RecommendationsPage = () => {
   const { user } = useAuth();
   const [addingTitle, setAddingTitle] = useState(null);
   const [addedMap, setAddedMap] = useState({});
+  const [feedbackLoadingId, setFeedbackLoadingId] = useState(null);
   const { addToast } = useToast();
   const queryClient = useQueryClient();
 
@@ -65,6 +66,36 @@ export const RecommendationsPage = () => {
       setAddingTitle(null);
     }
   };
+
+  const handleFeedback = async (rec, feedback) => {
+
+    console.log('Feedback button clicked')
+    console.log('recommendation', rec);
+    console.log('rec Id:', rec.id);
+
+    if(!rec.id){
+      addToast('Recommendation ID is missing. Please refresh.', 'error');
+        return;
+    }
+
+    try{
+      await axios.put(`/api/ai/recommendations/${rec.id}/feedback`,{feedback});
+
+      queryClient.setQueryData(
+        ['recommendations', user?.id],
+        (oldrecommendations = []) => oldrecommendations.map(item => item.id === rec.id?{...item, userFeedback: feedback}: item
+        )
+      );
+
+      addToast('Thanks for sharing your feedback!', 'success');
+    }catch(err){
+      addToast(
+        err.response?.data?.message || 'Could not save feedback.', 'error'
+      );
+    }finally{
+      setFeedbackLoadingId(null)
+    }
+  }
 
   return (
     <AppShell>
@@ -143,6 +174,78 @@ export const RecommendationsPage = () => {
                     <p style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', lineHeight: 1.55 }}>
                       {rec.reason}
                     </p>
+                  </div>
+
+                  <div style={{
+                    padding: '12px 0',
+                    borderTop: '1px solid var(--border-color)'
+                  }}>
+                    <p style={{
+                      fontSize: '0.8rem',
+                      color: 'var(--text-secondary)',
+                      marginBottom:'10px'
+                    }}>
+                      Was this recommendation useful?
+                    </p>
+
+                    <div style={{display: 'flex', gap:'10px'}}>
+                      <button
+                       type ="button"
+                       disabled={feedbackLoadingId===rec.Id}
+                       onClick={() => handleFeedback(rec, 'useful')}
+                       aria-label="Mark recommendation as useful"
+                       style={{
+                        display:'flex',
+                        alignItems:'center',
+                        gap:'6px',
+                        padding:'8px 12px',
+                        borderRadius:'8px',
+                        border: '1px solid var(--border-color)',
+                        backgroundColor: rec.userFeedback === 
+                        'useful'
+                        ?'var(--bg-surface-subtle)'
+                        :'transparent',
+                        color: rec.userFeedback == 'useful'
+                        ? 'var(--accent-primary)'
+                        :'var(--text-secondary)',
+                        cursor:'pointer',
+                        opacity:feedbackLoadingId === rec.id? 0.6 : 1
+                       }}
+                       >
+                        <ThumbsUp size = {16}/>
+                        <span style = {{fontSize : '0.8rem'}}>Useful</span>
+
+                      </button>
+
+                      <button
+                       type ="button"
+                       disabled={feedbackLoadingId===rec.Id}
+                       onClick={() => handleFeedback(rec, 'not_useful')}
+                       aria-label="Mark recommendation as not useful"
+                       style={{
+                        display:'flex',
+                        alignItems:'center',
+                        gap:'6px',
+                        padding:'8px 12px',
+                        borderRadius:'8px',
+                        border: '1px solid var(--border-color)',
+                        backgroundColor: rec.userFeedback === 
+                        'useful'
+                        ?'var(--bg-surface-subtle)'
+                        :'transparent',
+                        color: rec.userFeedback == 'useful'
+                        ? 'var(--accent-primary)'
+                        :'var(--text-secondary)',
+                        cursor:'pointer',
+                        opacity:feedbackLoadingId === rec.id? 0.6 : 1
+                       }}
+                       >
+                        <ThumbsDown size = {16}/>
+                        <span style = {{fontSize : '0.8rem'}}>Not useful</span>
+
+                      </button>
+                    </div>
+
                   </div>
 
                   <div style={{ marginTop: 'auto' }}>

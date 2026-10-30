@@ -4,8 +4,37 @@ const { ChatRepo } = require('../models/Chat');
 const { UserRepo } = require('../models/User');
 const { RecommendationRepo } = require('../models/Recommendation');
 const GeminiService = require('../services/geminiService');
+const crypto = require('crypto');
+const {RecommendationFeedbackRepo} = require('../models/RecommendationFeedback');
 
 const MAX_PROMPT_LENGTH = 4000;
+
+// For recommendation
+const getRecommendationId = (rec) =>{
+  return crypto
+   .createHash('sha256')
+   .update(`${rec.title.trim().toLowerCase()}-${rec.author.trim().toLowerCase()}`)
+   .digest('hex')
+   .substring(0,16);
+};
+
+const attachFeedback = async (userId, recommendations) => {
+  const feedbackRecords = await RecommendationFeedbackRepo.findByUser(userId);
+
+  const feedbackMap = new Map(
+    feedbackRecords.map(item => [item.recommendationId, item.feedback])
+  );
+
+  return recommendations.map(rec => {
+    const id = getRecommendationId(rec);
+
+    return {
+      ...rec,
+      id,
+      userFeedback:feedbackMap.get(id) || null
+    };
+  });
+};
 
 const handleChat = async (req, res) => {
   try {
@@ -159,8 +188,14 @@ const getRecommendations = async (req, res) => {
     if (!refresh || refresh === 'false') {
       const cached = await RecommendationRepo.findByUser(userId);
       if (cached && cached.recommendations && cached.recommendations.length > 0) {
+        const recommendationsWithFeedback = await attachFeedback(
+          userId,
+          cached.recommendations
+        );
+
+
         return res.json({
-          recommendations: cached.recommendations,
+          recommendations: recommendationsWithFeedback,
           cached: true,
           generatedAt: cached.generatedAt
         });
@@ -190,8 +225,13 @@ const getRecommendations = async (req, res) => {
       await RecommendationRepo.saveRecommendations(userId, recommendations, 12);
     }
 
+    const recommendationsWithFeedback = await attachFeedback(
+      userId,
+      recommendations
+    );
+
     return res.json({
-      recommendations,
+      recommendations: recommendationsWithFeedback,
       cached: false,
       isFallback: recResult.isFallback || false,
       generatedAt: new Date().toISOString()
@@ -199,6 +239,56 @@ const getRecommendations = async (req, res) => {
   } catch (error) {
     console.error('getRecommendations error:', error.message);
     return res.status(500).json({ message: 'Failed to generate recommendations.' });
+  }
+};
+
+const submitRecommendationFeedback = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const{recommendationId} = req.params;
+    const{feedback} = req.body;
+
+    if(!['useful','not_useful'].includes(feedback)){
+      return res.status(400).json({
+        message: 'Feedback must be useful or not_useful.'
+      });
+    }
+
+    const cached = await RecommendationRepo.findByUser(userId);
+
+    if(!cached || !cached.recommendations){
+      return res.status(404).json({
+        message: 'Recommendation not found.'
+      });
+    }
+
+    const recommendationExist = cached.recommendations.some(
+      rec => getRecommendationId(rec) === recommendationId
+    );
+
+    if(!recommendationExist){
+      return res.status(404).json({
+        message: 'Recommendation not found.'
+      });
+    }
+
+    const savedFeedback = await RecommendationFeedbackRepo.saveFeedback(
+      userId,
+      recommendationId,
+      feedback
+    );
+
+    return res.json({
+      message: 'Feedback saved successfully.',
+      feedback: savedFeedback.feedback
+    });
+
+  }catch(error){
+    console.error('Recommendation feedback error:' , error.message);
+
+    return res.status(500).json({
+      message: 'Failed to save recommendation feedback.'
+    });
   }
 };
 
@@ -241,5 +331,6 @@ module.exports = {
   handleChat,
   getRecommendations,
   getChatHistory,
-  clearChatHistory
+  clearChatHistory,
+  submitRecommendationFeedback
 };

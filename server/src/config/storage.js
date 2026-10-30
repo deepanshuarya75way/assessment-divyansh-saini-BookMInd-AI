@@ -101,5 +101,6 @@ module.exports = {
   booksStore: new JsonStore('books'),
   notesStore: new JsonStore('notes'),
   chatsStore: new JsonStore('chats'),
-  recommendationsStore: new JsonStore('recommendations')
+  recommendationsStore: new JsonStore('recommendations'),
+  recommendationFeedbackStore: new JsonStore('recommendationFeedback')
 };

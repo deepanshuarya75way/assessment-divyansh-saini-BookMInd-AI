@@ -11,5 +11,8 @@
     "dev:client": "npm run dev --prefix client",
     "build:client": "npm run build --prefix client",
     "test": "npm test --prefix server"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.9"
   }
 }
